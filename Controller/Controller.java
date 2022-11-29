@@ -1,16 +1,18 @@
 package Controller;
 
-import IItem.Find;
-import IItem.IItem;
-import IItem.Sort;
-import IItem.Coffe.*;
 import Exceptions.*;
+import IItem.Coffe.*;
+import IItem.*;
 import Storage.*;
+import Email.*;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
+
 
 /**
  * Конроллер програми
@@ -19,24 +21,20 @@ public class Controller {
     Scanner scanner = new Scanner(System.in);
     private final double totalMoney;
     private double usedMoney;
-    private final IStorage storage;
-    private final CoffeFabric coffeeFabric;
+    public final IStorage storage;
+    public final CoffeFabric coffeeFabric;
     private final List<IItem> find = new ArrayList<>();
+    private static final Logger logger = LogManager.getLogger();
+    private static final Email email = new Email(new EmailService());
 
     /**
-     * Вказуємо об'єм та суму для створення фургону
+     *Вказуємо об'єм та суму для створення фургону
      */
-    public Controller() {
-        System.out.print("Введіть суму, на яку хочете заповнити фургон: ");
-        int money = scanner.nextInt();
-        System.out.print("Введіть об'єм фургона: ");
-        int volume = scanner.nextInt();
+    public Controller(int money, int volume) {
         if (money <= 0 || volume <= 0) {
-            try {
-                throw new InputValuesZeroOrNegativeException ("гроші або ж об'єм не можуть бути нульовими або від'ємними");
-            } catch (InputValuesZeroOrNegativeException e) {
-                throw new RuntimeException(e);
-            }
+            logger.error("IllegalArgumentException(Ви ввели некоректний аргумент!)");
+            email.Run();
+            throw new IllegalArgumentException("Ви ввели некоректний аргумент!");
         } else {
             this.totalMoney = money;
             this.storage = new Van(volume);
@@ -56,44 +54,31 @@ public class Controller {
     }
 
     private String getState() {
-        return "Вмкористана сума: " + this.usedMoney + " з: " + this.totalMoney;
+        return "Використана сума: " + this.usedMoney + " з: " + this.totalMoney;
     }
 
-    /**
-     * Метод, який повертає інформацію про найдені по певному параметру предмети
-     * @param findBy параметр, по якому здійснювався пошук
-     * @param startValue початкове значення діапазону
-     * @param endValue кінцеве значення діапазону
-     * @return відфільтровані дані
-     */
     private String findToString(List<IItem> items, Find findBy, int startValue, int endValue) {
-        StringBuilder result = new StringBuilder("\nРезультат пісял фільтрації в діапазоні ");
+        StringBuilder result = new StringBuilder("\nРезультат після фільтрації в діапазоні ");
         result.append(findBy).append(" [").append(startValue).append(" - ").append(endValue).append("]\n");
-        double sum = 0;
+        double money = 0;
         int volume = 0;
         for (IItem item : items) {
             result.append(item.toString()).append("\n");
-            sum += item.getCost();
+            money += item.getCost();
             volume += item.getVolume();
         }
-        result.append("\nВикористаний об'єм: ").append(volume).append("\nВикористана сума: ").append(sum).append("\n");
+        result.append("\nВикористаний об'єм: ").append(volume).append("\nВикористана сума: ").append(money).append("\n");
         return result.toString();
     }
 
-    /**
-     * Метод виклику пошуку продуктів по заданому параметру та отримання клонів найдених продуктів в окрему колекцію
-     * @param findBy параметр, по якому здійснювався пошук
-     * @param startValue початкове значення діапазону
-     * @param endValue кінцеве значення діапазону
-     * @throws CloneItemException виключення під час клонування продукту
-     */
-    public void find(Find findBy, int startValue, int endValue) throws CloneItemException {
+    public List<Coffee> find(Find findBy, int startValue, int endValue) throws CloneItemException {
         find.clear();
         find.addAll(storage.find(findBy, startValue, endValue));
-        if (!find.isEmpty()) {
+        if (!find.isEmpty())
             System.out.println(findToString(find, findBy, startValue, endValue));
-        }
+        return null;
     }
+
     public void Find(){
         Scanner scanner = new Scanner(System.in);
         System.out.println("Введіть 0, якщо хочете відфільтрувати замовлення по ціні і 1, якщо по об'єму:");
@@ -107,6 +92,10 @@ public class Controller {
         int startValues = scanner.nextInt();
         System.out.print("До:");
         int endValues = scanner.nextInt();
+        Finds(Finding, startValues, endValues);
+    }
+
+    public List<Coffee> Finds(int Finding, int startValues, int endValues){
         if(Finding == 1) {
             try {
                 find(Find.BY_VOLUME, startValues, endValues);
@@ -114,17 +103,16 @@ public class Controller {
                 throw new RuntimeException(e);
             }
         }
-        else {
+        if(Finding == 0) {
             try {
                 find(Find.BY_COST, startValues, endValues);
             } catch (CloneItemException e) {
                 throw new RuntimeException(e);
             }
         }
+        return null;
     }
-    /**
-     * Заповнення сховища
-     */
+
     public void fillStorage() {
         Scanner scanner = new Scanner(System.in);
         System.out.println("Бажаєте заповнити фургон вручну(1) чи оберете автоматичне заповнення(0)?:");
@@ -133,6 +121,10 @@ public class Controller {
             System.out.println("Введіть коректні значення!");
             Fill = scanner.nextInt();
         }
+        fillStorages(Fill);
+    }
+
+    public void fillStorages(int Fill){
         if(Fill == 0) {
             while (true) {
                 IItem item = coffeeFabric.getRandomCoffee();
@@ -143,7 +135,8 @@ public class Controller {
         }
         else {
             while (true) {
-                IItem item = coffeeFabric.getCoffee();
+                IItem item;
+                item = coffeeFabric.getCoffee(IntroduceCoffee(), IntroduceCoffeeCondition(), IntroduceCoffeeWrap());
                 if (!hasFreeMoney(item.getCost()) || !storage.add(item)) {
                     System.out.println("Останній продукт не вдалося додати у замовлення!");
                     break;
@@ -151,21 +144,46 @@ public class Controller {
                 usedMoney += item.getCost();
             }
         }
-
     }
 
-    /**
-     * Вивід інформації
-     */
+    public int IntroduceCoffee(){
+        System.out.println("Введіть Номер сорта потрібної вам кави: \n1 - Арабіка \n2 - Робуста \n3 - Ліберіка");
+        int N = scanner.nextInt();
+        while (N != 1 && N != 2 && N != 3) {
+            System.out.println("Такого сорту кави не існує! Введіть коректні значення");
+            N = scanner.nextInt();
+        }
+        return N;
+    }
+
+    private int IntroduceCoffeeCondition(){
+        Scanner scanner = new Scanner(System.in);
+        System.out.println("Введіть стан потрібної вам кави: \n1 - Розчинна \n2 - Мелена \n3 - Зернова");
+        int N = scanner.nextInt();
+        while (N != 1 && N != 2 && N != 3) {
+            System.out.println("Такого стану кави не існує! Введіть коректні значення");
+            N = scanner.nextInt();
+        }
+        return N;
+    }
+
+    private int IntroduceCoffeeWrap(){
+        Scanner scanner = new Scanner(System.in);
+        System.out.println("Введіть потрібне вам пакування: \n1 - Скляне \n2 - Пластикове");
+        int N = scanner.nextInt();
+        while (N != 1 && N != 2) {
+            System.out.println("Такого пакування кави не існує! Введіть коректні значення");
+            N = scanner.nextInt();
+        }
+        return N;
+    }
+
     public void outputStorage() {
         System.out.println(storage);
         System.out.println(storage.getState());
         System.out.println(this.getState());
     }
 
-    /**
-     * Виклик сортування
-     */
     public void sort() {
         Scanner scanner = new Scanner(System.in);
         System.out.println("Введіть 0, якщо хочете відсортувати замовлення по ціні і 1, якщо по об'єму:");
@@ -174,19 +192,26 @@ public class Controller {
             System.out.println("Введіть коректні значення!");
             sort = scanner.nextInt();
         }
+        sorts(sort);
+    }
+    public void sorts(int sort){
         if(sort == 1)
             storage.sort(Sort.BY_VOLUME);
         else
             storage.sort(Sort.BY_COST);
         outputStorage();
     }
-
     public void upVolumeOfStorage() {
-        System.out.print("Введіть об'єм, на який хочете збільшити об'єм фургона:");
+        System.out.println("Введіть об'єм, на який хочете збільшити об'єм фургона:");
         int volume = scanner.nextInt();
-        if (volume > 0)
-            storage.upVolume(volume);
-        else
-            System.out.println("Volume cant be zero or negative");
+        upVolumeOfStorages(volume);
+    }
+    public void upVolumeOfStorages(int volume) {
+        if (volume > 0) storage.upVolume(volume);
+        else {
+            logger.error("IllegalArgumentException(Ви ввели некоректний аргумент!)");
+            email.Run();
+            throw new IllegalArgumentException("Ви ввели некоректний аргумент!");
+        }
     }
 }
