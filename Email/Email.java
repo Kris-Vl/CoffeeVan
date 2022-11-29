@@ -20,7 +20,7 @@ public class Email {
 
     @EventListener(ApplicationReadyEvent.class)
     public void sendEmail() throws MessagingException {
-        emailService.sendEmailWithAttachment("The program ended with an error or exception!","kristinav2345@gmail.com",
+        emailService.sendEmailWithAttachment("The program ended with an error or exception!","toEmail",
                 "Program logs",
                 "D:\\Java\\JavaProgr\\Laboratory-Work_4-8\\coffeevan\\logs\\coffeeLogs\\logs.log");
     }
